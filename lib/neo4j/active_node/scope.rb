@@ -1,5 +1,3 @@
-require 'active_support/per_thread_registry'
-
 module Neo4j::ActiveNode
   module Scope
     extend ActiveSupport::Concern
@@ -113,11 +111,32 @@ module Neo4j::ActiveNode
       end
     end
 
+    # Copied from ActiveSupport 4+
+    module PerThreadRegistry
+      def self.extended(object)
+        object.instance_variable_set '@per_thread_registry_key', object.name.freeze
+      end
+
+      def instance
+        Thread.current[@per_thread_registry_key] ||= new
+      end
+
+      protected
+        def method_missing(name, *args, &block) # :nodoc:
+          # Caches the method definition as a singleton method of the receiver.
+          define_singleton_method(name) do |*a, &b|
+            instance.public_send(name, *a, &b)
+          end
+
+          send(name, *args, &block)
+        end
+    end
+
 
     # Stolen from ActiveRecord
     # https://github.com/rails/rails/blob/08754f12e65a9ec79633a605e986d0f1ffa4b251/activerecord/lib/active_record/scoping.rb#L57
     class ScopeRegistry # :nodoc:
-      extend ActiveSupport::PerThreadRegistry
+      extend PerThreadRegistry
 
       VALID_SCOPE_TYPES = [:current_scope, :ignore_default_scope]
 
